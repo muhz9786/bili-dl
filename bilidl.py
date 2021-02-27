@@ -16,7 +16,7 @@ Option:
     -i: Download video info into .txt file.
     -c: Download cover image of video.
     -o: Assign the output path and filename.
-    -v: set max rate to limit download speed.
+    -v: Set max rate to limit download speed.
 Uasge:
     1. bili-dl {URL}            // Only look media list.
     2. bili-dl [options] {URL}
