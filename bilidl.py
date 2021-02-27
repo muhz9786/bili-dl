@@ -5,6 +5,22 @@ import sys
 import time
 import re
 import json
+import prettytable as pt
+
+HELP_DOC = '''
+bili-dl: Bilibili video download toolkit. 
+Version: 1.0 Beta | Author: Muhz
+Option:
+    -m: Download video and audio by id. 
+        If input {vedio id}+{audio id}, like 80+280, they will be combined in a .mp4 file by ffmpeg.
+    -i: Download video info into .txt file.
+    -c: Download cover image of video.
+    -o: Assign the output path and filename.
+    -v: set max rate to limit download speed.
+Uasge:
+    1. bili-dl {URL}            // Only look media list.
+    2. bili-dl [options] {URL}
+'''
 
 HEADER = {
     "authority": "upos-sz-mirrorcoso1.bilivideo.com",
@@ -15,28 +31,79 @@ HEADER = {
     "accept-encoding": "identity",
     "user-agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/88.0.4324.182 Safari/537.36 Edg/88.0.705.74",
 }
-cookie = "_uuid=15F39D72-278A-752B-C188-01AC2FAEC51D12422infoc; buvid3=C2C61D20-6DD4-413D-B354-A9C9C017D6B3184997infoc; buvid_fp=C2C61D20-6DD4-413D-B354-A9C9C017D6B3184997infoc; SESSDATA=ba2c89ca%2C1629568877%2Cf9a68%2A21; bili_jct=7f3532b9c9dccd54d264d5f4d95afd55; DedeUserID=6670765; DedeUserID__ckMd5=216ed540b0210a77; sid=6fzaup96; LIVE_BUVID=AUTO8816140171651705; CURRENT_FNVAL=80; blackside_state=1; rpdid=|(um|l||JJ)~0J'uYuR|ku|RR; fingerprint=d8db56ee518e8fbd444e1edd760400d1; buvid_fp_plain=C2C61D20-6DD4-413D-B354-A9C9C017D6B3184997infoc; dy_spec_agreed=1; CURRENT_QUALITY=112; finger=-166317360; bp_video_offset_6670765=496015959025095618; bsource=search_bing; PVID=14; bp_t_offset_6670765=496189256659689793"
-#INTRO_API = "https://api.bilibili.com/x/web-interface/archive/desc?bvid="
+
+# cookie = ""
+
+FFMPEG = "ffmpeg.exe"
 
 def get(url):
+    """
+    Send a get request and init a new `Downloader` object.
+
+    url: the url of video website, like `https://www.bilibili.com/video/BV114514`.
+
+    Return:
+    a new `Downloader` object
+    """
     return Downloader(url)
+
+def combine(input1, input2, output, ffmpeg=FFMPEG):
+    """
+    Combine video and audio uses ffmpeg.
+
+    input1, input2: video and audio input.
+
+    ffmpeg: path of ffmpeg.exe.
+    """
+    cmd = f'{FFMPEG} -i {input1} -i {input2} -c copy {output}'
+    code = os.system(cmd)
+    if code != 0:
+        raise RuntimeError("ffmpeg run failed.")
 
 class IdError(ValueError):
     pass
 
 class Downloader:
+    """
+    The media downloader of Bilibili.
+    """
     def __init__(self, url):
         #self.sess = requests.Session()
-        HEADER["cookie"] = cookie
+        #HEADER["cookie"] = cookie
         r = requests.get(url, headers=HEADER)
         soup = BeautifulSoup(r.text, "lxml")
-        self.max_rate = None
-        self.info = soup.find(class_="info").text
-        self.image = soup.find(attrs={"itemprop": "image"})["content"]
-        self.playinfo = soup.find(text=re.compile("window.__playinfo__"))[20:]
-        self.video_list, self.audio_list = self.get_media_list()
 
-    def get_media_list(self):
+        self.max_kbps = None
+        self.download_path = "./"
+        if not os.path.exists(self.download_path):
+            os.mkdir(self.download_path)
+
+        self.title = soup.find("h1")["title"]
+        self.info = soup.find(class_="info").text
+        self.cover = soup.find(attrs={"itemprop": "image"})["content"]
+        self.playinfo = soup.find(text=re.compile("window.__playinfo__"))[20:]
+
+        self.file_name = self.title
+        self.video_list, self.audio_list = self.__get_media_list()
+
+    def set_download_output(self, path):
+        """
+        Set output path and filename.
+        """
+        pass
+
+    def set_download_speed(self, max_kbps):
+        """
+        Set max download speed.
+        """
+        pass
+
+    def __get_media_list(self):
+        """
+        Return:
+        video_list: a list of videos info.
+        audio_list: a list of audios info.
+        """
         data = self.playinfo
         list_dict = json.loads(data)["data"]["dash"]
         video_list = []
@@ -106,6 +173,11 @@ class Downloader:
         return video_list, audio_list
 
     def download_media(self, id_):
+        """
+        Download video and audio with id.
+
+        id: id of media in the list.
+        """
         for media in self.video_list + self.audio_list:
             if media["id"] == id_:
                 url_list = media["url_list"]
@@ -114,10 +186,60 @@ class Downloader:
             raise IdError("id not found.")
         
         url = url_list[0]
+        # TODO: 限速
         with requests.get(url, stream=True, headers=HEADER) as r:
-            with open("./video.mp4", "wb") as f:
-                for chunk in r.iter_content(chunk_size=self.max_rate):
+            with open(f'{self.download_path}/{self.file_name}_{id_}.m4s', "wb") as f:
+                for chunk in r.iter_content(chunk_size=self.max_kbps):
                     if chunk:
                         f.write(chunk)
                         #time.sleep(sleep_time)
 
+    def download_info(self):
+        """
+        Download video info into txt file.
+        """
+        with open(f'{self.download_path}/{self.file_name}_info.txt', "w", encoding="utf-8") as f:
+            f.write(f'[title]\n{self.title}\n[info]\n{self.info}')
+    
+    def download_cover(self):
+        """
+        Download cover image of video.
+        """
+        r = requests.get(self.cover, headers=HEADER)
+        with open(f'{self.download_path}/{self.file_name}_cover.png', "wb") as f:
+            f.write(r.content)
+
+if __name__ == "__main__":
+    if len(sys.argv) == 1:
+        print(HELP_DOC)
+    else:
+        param_list = sys.argv[1:-1]
+        url = sys.argv[-1]
+
+        downloader = Downloader(url)
+
+        param_dict = {
+            "-m": downloader.download_media,
+            "-i": downloader.download_info,
+            "-c": downloader.download_cover,
+            "-o": downloader.set_download_output,
+            "-v": downloader.set_download_speed,
+        }
+
+        # print media info.
+        table = pt.PrettyTable()
+        table.field_names = ["id", "type", "quality", "code", ]
+        for video in downloader.video_list:
+            quality = f'{video["height"]}, {video["fps"]}'
+            flag = "(best)" if video["is_best"] else ""
+            table.add_row([video["id"] + flag, "video", quality, video["codecs"]])
+        for audio in downloader.audio_list:
+            quality = audio["bandwidth"]
+            flag = "(best)" if audio["is_best"] else ""
+            table.add_row([audio["id"] + flag, "audio", quality, audio["codecs"]])
+        print(table)
+
+        for index, keyword in enumerate(param_list):
+            if keyword in param_dict.keys():
+                param_dict[keyword]()
+                # TODO: 参数传递，注意方法调用顺序（先-o -v）
