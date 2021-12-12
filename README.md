@@ -1,7 +1,7 @@
 # bili-dl
 bilibili命令行下载工具
 
-'python bilidl.py'
+```python bilidl.py```
 
 命令选项:
 
