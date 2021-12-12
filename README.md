@@ -1,6 +1,8 @@
 # bili-dl
 bilibili命令行下载工具
 
+'python bilidl.py'
+
 命令选项:
 
     -m: 下载指定id的视频或音频。
@@ -15,7 +17,7 @@ bilibili命令行下载工具
     
 使用方法:
 
-    1. bili-dl {URL或BV}             // 查看资源列表
+    1. bilidl {URL或BV}             // 查看资源列表
     
-    2. bili-dl [options] {URL或BV}
+    2. bilidl [options] {URL或BV}
     
